@@ -1,12 +1,16 @@
 const express = require('express');
 const router = express.Router();
 
-const workoutController = require('../controllers/workout.controller');
+const workoutsController = require('../controllers/workout.controller');
+const workoutExerciseController = require('../controllers/workoutExercise.controller');
 const { verifyToken } = require('../middlewares/auth.middleware');
 
-router.post('/', verifyToken, workoutController.createWorkout);
-router.get('/', verifyToken, workoutController.getWorkouts);
-router.put('/:id', verifyToken, workoutController.updateWorkout);
-router.delete('/:id', verifyToken, workoutController.deleteWorkout);
+router.post('/', verifyToken, workoutsController.createWorkout);
+router.get('/', verifyToken, workoutsController.getWorkouts);
+router.put('/:id', verifyToken, workoutsController.updateWorkout);
+router.delete('/:id', verifyToken, workoutsController.deleteWorkout);
+
+router.post('/:id/exercises', verifyToken, workoutExerciseController.addExerciseToWorkout);
+router.get('/:id/detail', verifyToken, workoutExerciseController.getWorkoutFullDetail);
 
 module.exports = router;

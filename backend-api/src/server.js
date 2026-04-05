@@ -15,6 +15,7 @@ const startServer = async () => {
     });
   } catch (error) {
     console.error('❌ Error conectando a PostgreSQL:', error.message);
+    process.exit(1);
   }
 };
 
