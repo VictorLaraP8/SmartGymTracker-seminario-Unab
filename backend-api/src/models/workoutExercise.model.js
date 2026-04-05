@@ -1,6 +1,5 @@
 const pool = require('../config/db');
 
-// Crear relación entre workout y ejercicio
 const addExerciseToWorkout = async ({ workoutId, exerciseId, sets, reps, weight }) => {
   const query = `
     INSERT INTO workout_exercises (workout_id, exercise_id, sets, reps, weight)
@@ -12,7 +11,6 @@ const addExerciseToWorkout = async ({ workoutId, exerciseId, sets, reps, weight 
   return result.rows[0];
 };
 
-// Obtener ejercicios de un workout
 const getExercisesByWorkoutId = async (workoutId) => {
   const query = `
     SELECT 
@@ -34,7 +32,22 @@ const getExercisesByWorkoutId = async (workoutId) => {
   return result.rows;
 };
 
+const getWorkoutMetrics = async (workoutId) => {
+  const query = `
+    SELECT
+      COUNT(DISTINCT we.exercise_id) AS total_exercises,
+      COALESCE(SUM(we.sets), 0) AS total_sets,
+      COALESCE(SUM(we.reps), 0) AS total_reps,
+      COALESCE(SUM(we.sets * we.reps * we.weight), 0) AS total_volume
+    FROM workout_exercises we
+    WHERE we.workout_id = $1
+  `;
+  const result = await pool.query(query, [workoutId]);
+  return result.rows[0];
+};
+
 module.exports = {
   addExerciseToWorkout,
   getExercisesByWorkoutId,
+  getWorkoutMetrics,
 };

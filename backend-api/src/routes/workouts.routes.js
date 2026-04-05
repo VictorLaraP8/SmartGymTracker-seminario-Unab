@@ -9,6 +9,7 @@ router.post('/', verifyToken, workoutsController.createWorkout);
 router.get('/', verifyToken, workoutsController.getWorkouts);
 router.put('/:id', verifyToken, workoutsController.updateWorkout);
 router.delete('/:id', verifyToken, workoutsController.deleteWorkout);
+router.get('/:id/metrics', verifyToken, workoutExerciseController.getWorkoutMetrics);
 
 router.post('/:id/exercises', verifyToken, workoutExerciseController.addExerciseToWorkout);
 router.get('/:id/detail', verifyToken, workoutExerciseController.getWorkoutFullDetail);

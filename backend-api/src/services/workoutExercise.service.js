@@ -57,7 +57,31 @@ const getWorkoutFullDetail = async ({ workoutId, userId }) => {
   };
 };
 
+const getWorkoutMetrics = async (workoutId, userId) => {
+  const workout = await workoutModel.findWorkoutById(workoutId);
+
+  if (!workout) {
+    throw new Error('Workout no encontrado');
+  }
+
+  if (workout.user_id !== userId) {
+    throw new Error('No tienes permiso para ver este workout');
+  }
+
+  const metrics = await workoutExerciseModel.getWorkoutMetrics(workoutId);
+
+  return {
+    workout_id: workout.id,
+    type: workout.type,
+    total_exercises: Number(metrics.total_exercises),
+    total_sets: Number(metrics.total_sets),
+    total_reps: Number(metrics.total_reps),
+    total_volume: Number(metrics.total_volume),
+  };
+};
+
 module.exports = {
   addExerciseToWorkout,
   getWorkoutFullDetail,
+  getWorkoutMetrics,
 };

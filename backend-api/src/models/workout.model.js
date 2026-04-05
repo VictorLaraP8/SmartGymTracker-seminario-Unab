@@ -12,7 +12,7 @@ const createWorkout = async ({ userId, type, durationMinutes, workoutDate }) => 
   return result.rows[0];
 };
 
-// READ (todos los workouts del usuario)
+// READ: todos los workouts del usuario
 const findWorkoutsByUser = async (userId) => {
   const query = `
     SELECT id, user_id, type, duration_minutes, workout_date, created_at
@@ -24,10 +24,11 @@ const findWorkoutsByUser = async (userId) => {
   return result.rows;
 };
 
-// READ (un solo workout por id)
+// READ: un workout por id
 const findWorkoutById = async (id) => {
   const query = `
-    SELECT * FROM workouts
+    SELECT *
+    FROM workouts
     WHERE id = $1
   `;
   const result = await pool.query(query, [id]);
@@ -60,10 +61,24 @@ const deleteWorkout = async ({ id, userId }) => {
   return result.rows[0];
 };
 
+// Último workout del usuario
+const getLastWorkoutByUserId = async (userId) => {
+  const query = `
+    SELECT id, user_id, type, duration_minutes, workout_date, created_at
+    FROM workouts
+    WHERE user_id = $1
+    ORDER BY workout_date DESC NULLS LAST, created_at DESC
+    LIMIT 1
+  `;
+  const result = await pool.query(query, [userId]);
+  return result.rows[0];
+};
+
 module.exports = {
   createWorkout,
   findWorkoutsByUser,
   findWorkoutById,
   updateWorkout,
   deleteWorkout,
+  getLastWorkoutByUserId,
 };

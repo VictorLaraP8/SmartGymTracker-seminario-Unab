@@ -47,7 +47,28 @@ const getWorkoutFullDetail = async (req, res) => {
   }
 };
 
+const getWorkoutMetrics = async (req, res) => {
+  try {
+    const workoutId = Number(req.params.id);
+    const userId = req.user.id;
+
+    const metrics = await workoutExerciseService.getWorkoutMetrics(workoutId, userId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Métricas del workout obtenidas correctamente',
+      data: metrics,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   addExerciseToWorkout,
   getWorkoutFullDetail,
+  getWorkoutMetrics,
 };
