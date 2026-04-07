@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/user.model');
 
-const registerUser = async ({ name, email, password }) => {
+const registerUser = async ({ name, email, password, role }) => {
   if (!name || !email || !password) {
     throw new Error('Todos los campos son obligatorios');
   }
@@ -19,7 +19,7 @@ const registerUser = async ({ name, email, password }) => {
     name,
     email,
     password: hashedPassword,
-    role: 'user',
+    role: role || 'user',
   });
 
   return newUser;

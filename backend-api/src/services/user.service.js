@@ -1,65 +1,56 @@
-const workoutModel = require('../models/workout.model');
+const pool = require('../config/db');
 
+// 📌 Obtener estado de inactividad del usuario logeado
 const getMyInactivityStatus = async (userId) => {
-  const lastWorkout = await workoutModel.getLastWorkoutByUserId(userId);
+  const query = `
+    SELECT MAX(created_at) AS last_workout_date
+    FROM workouts
+    WHERE user_id = $1
+  `;
 
-  if (!lastWorkout) {
-    return {
-      user_id: userId,
-      last_workout_date: null,
-      days_without_training: null,
-      status: 'no_data',
-    };
+  const result = await pool.query(query, [userId]);
+
+  const lastWorkoutDate = result.rows[0].last_workout_date;
+
+  let daysWithoutTraining = 0;
+
+  if (lastWorkoutDate) {
+    const lastDate = new Date(lastWorkoutDate);
+    const today = new Date();
+
+    const diffTime = Math.abs(today - lastDate);
+    daysWithoutTraining = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   }
 
-  const today = new Date();
-  const workoutDate = new Date(
-    lastWorkout.workout_date || lastWorkout.created_at
-  );
-
-  const diffMs = today - workoutDate;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
+  // 🔥 Clasificación inteligente
   let status = 'active';
 
-  if (diffDays >= 7) {
-    status = 'inactive';
-  } else if (diffDays >= 3) {
+  if (daysWithoutTraining >= 8) {
+    status = 'critical';
+  } else if (daysWithoutTraining >= 3) {
     status = 'warning';
   }
 
   return {
     user_id: userId,
-    last_workout_date: workoutDate,
-    days_without_training: diffDays,
+    last_workout_date: lastWorkoutDate,
+    days_without_training: daysWithoutTraining,
     status,
   };
 };
 
+// 📌 Generar alertas para el usuario logeado
 const getUserAlerts = async (userId) => {
   const inactivity = await getMyInactivityStatus(userId);
 
-  const alerts = [];
+  let alerts = [];
 
-  if (inactivity.status === 'warning') {
-    alerts.push({
-      type: 'warning',
-      message: 'Llevas varios días sin entrenar, ¡retoma tu rutina!',
-    });
+  if (inactivity.days_without_training >= 3) {
+    alerts.push('Usuario con baja adherencia');
   }
 
-  if (inactivity.status === 'inactive') {
-    alerts.push({
-      type: 'danger',
-      message: 'Has estado inactivo más de 7 días',
-    });
-  }
-
-  if (inactivity.status === 'no_data') {
-    alerts.push({
-      type: 'info',
-      message: 'Aún no has registrado entrenamientos',
-    });
+  if (inactivity.days_without_training >= 8) {
+    alerts.push('Usuario en riesgo crítico de abandono');
   }
 
   return {
@@ -68,7 +59,70 @@ const getUserAlerts = async (userId) => {
   };
 };
 
+// 📌 Obtener usuarios en riesgo (panel entrenador)
+const getUsersAtRisk = async () => {
+  const query = `
+    SELECT u.id, u.name, u.email,
+           MAX(w.created_at) AS last_workout_date
+    FROM users u
+    LEFT JOIN workouts w ON u.id = w.user_id
+    GROUP BY u.id
+  `;
+
+  const result = await pool.query(query);
+
+  const users = result.rows;
+
+  const processedUsers = users.map((user) => {
+    let daysWithoutTraining = 0;
+
+    if (user.last_workout_date) {
+      const lastDate = new Date(user.last_workout_date);
+      const today = new Date();
+
+      const diffTime = Math.abs(today - lastDate);
+      daysWithoutTraining = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    // 🔥 Clasificación inteligente
+    let status = 'active';
+
+    if (daysWithoutTraining >= 8) {
+      status = 'critical';
+    } else if (daysWithoutTraining >= 3) {
+      status = 'warning';
+    }
+
+    // 🔥 Alertas
+    let alerts = [];
+
+    if (daysWithoutTraining >= 3) {
+      alerts.push('Usuario con baja adherencia');
+    }
+
+    if (daysWithoutTraining >= 8) {
+      alerts.push('Usuario en riesgo crítico de abandono');
+    }
+
+    return {
+      user_id: user.id,
+      name: user.name,
+      email: user.email,
+      last_workout_date: user.last_workout_date,
+      days_without_training: daysWithoutTraining,
+      status,
+      alerts,
+    };
+  });
+
+  // 🔥 SOLO usuarios en riesgo (warning + critical)
+  return processedUsers.filter(
+    (user) => user.status === 'warning' || user.status === 'critical'
+  );
+};
+
 module.exports = {
   getMyInactivityStatus,
   getUserAlerts,
+  getUsersAtRisk,
 };

@@ -36,7 +36,25 @@ const getUserAlerts = async (req, res) => {
   }
 };
 
+const getUsersAtRisk = async (req, res) => {
+  try {
+    const usersAtRisk = await userService.getUsersAtRisk();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Usuarios en riesgo obtenidos correctamente',
+      data: usersAtRisk,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getMyInactivityStatus,
   getUserAlerts,
+  getUsersAtRisk,
 };
