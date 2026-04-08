@@ -1,79 +1,108 @@
+const pool = require('../config/db');
 const workoutModel = require('../models/workout.model');
 
-const createWorkoutForUser = async ({ userId, type, durationMinutes, workoutDate }) => {
-  if (!type) {
-    throw new Error('El campo type es obligatorio');
-  }
-
-  if (!durationMinutes) {
-    throw new Error('El campo durationMinutes es obligatorio');
-  }
-
-  if (Number(durationMinutes) <= 0) {
-    throw new Error('durationMinutes debe ser mayor a 0');
+const createWorkout = async ({ userId, type, durationMinutes, workoutDate }) => {
+  if (!type || !durationMinutes || !workoutDate) {
+    throw new Error('Todos los campos son obligatorios');
   }
 
   return await workoutModel.createWorkout({
     userId,
     type,
     durationMinutes,
-    workoutDate: workoutDate || null,
+    workoutDate,
   });
 };
 
-const getWorkoutsByUser = async (userId) => {
+const getWorkouts = async (userId) => {
   return await workoutModel.findWorkoutsByUser(userId);
 };
 
-const updateWorkoutById = async ({ id, userId, type, durationMinutes, workoutDate }) => {
-  if (!type) {
-    throw new Error('El campo type es obligatorio');
+const updateWorkout = async ({ id, userId, type, durationMinutes, workoutDate }) => {
+  if (!type || !durationMinutes || !workoutDate) {
+    throw new Error('Todos los campos son obligatorios');
   }
 
-  if (!durationMinutes) {
-    throw new Error('El campo durationMinutes es obligatorio');
-  }
-
-  if (Number(durationMinutes) <= 0) {
-    throw new Error('durationMinutes debe ser mayor a 0');
-  }
-
-  const existingWorkout = await workoutModel.findWorkoutById(id);
-
-  if (!existingWorkout) {
-    throw new Error('Workout no encontrado');
-  }
-
-  if (existingWorkout.user_id !== userId) {
-    throw new Error('No tienes permiso para modificar este workout');
-  }
-
-  return await workoutModel.updateWorkout({
+  const updatedWorkout = await workoutModel.updateWorkout({
     id,
     userId,
     type,
     durationMinutes,
-    workoutDate: workoutDate || null,
+    workoutDate,
   });
+
+  if (!updatedWorkout) {
+    throw new Error('Workout no encontrado o no autorizado');
+  }
+
+  return updatedWorkout;
 };
 
-const deleteWorkoutById = async ({ id, userId }) => {
-  const existingWorkout = await workoutModel.findWorkoutById(id);
+const deleteWorkout = async (id, userId) => {
+  const deletedWorkout = await workoutModel.deleteWorkout({ id, userId });
 
-  if (!existingWorkout) {
-    throw new Error('Workout no encontrado');
+  if (!deletedWorkout) {
+    throw new Error('Workout no encontrado o no autorizado');
   }
 
-  if (existingWorkout.user_id !== userId) {
-    throw new Error('No tienes permiso para eliminar este workout');
-  }
+  return deletedWorkout;
+};
 
-  return await workoutModel.deleteWorkout({ id, userId });
+const getWorkoutHistory = async (userId) => {
+  const query = `
+    SELECT
+      w.id,
+      w.type,
+      w.duration_minutes,
+      w.workout_date,
+      w.created_at,
+      COUNT(DISTINCT we.exercise_id) AS total_exercises,
+      COALESCE(SUM(we.sets), 0) AS total_sets,
+      COALESCE(SUM(we.reps), 0) AS total_reps,
+      COALESCE(SUM(we.sets * we.reps * we.weight), 0) AS total_volume
+    FROM workouts w
+    LEFT JOIN workout_exercises we ON w.id = we.workout_id
+    WHERE w.user_id = $1
+    GROUP BY w.id
+    ORDER BY w.workout_date DESC, w.created_at DESC
+  `;
+
+  const result = await pool.query(query, [userId]);
+
+  return result.rows.map((workout) => ({
+    ...workout,
+    total_exercises: Number(workout.total_exercises),
+    total_sets: Number(workout.total_sets),
+    total_reps: Number(workout.total_reps),
+    total_volume: Number(workout.total_volume),
+  }));
+};
+
+const getWorkoutProgress = async (userId) => {
+  const query = `
+    SELECT
+      DATE(w.workout_date) AS date,
+      COALESCE(SUM(we.sets * we.reps * we.weight), 0) AS total_volume
+    FROM workouts w
+    LEFT JOIN workout_exercises we ON w.id = we.workout_id
+    WHERE w.user_id = $1
+    GROUP BY DATE(w.workout_date)
+    ORDER BY DATE(w.workout_date) ASC
+  `;
+
+  const result = await pool.query(query, [userId]);
+
+  return result.rows.map((row) => ({
+    date: row.date,
+    total_volume: Number(row.total_volume),
+  }));
 };
 
 module.exports = {
-  createWorkoutForUser,
-  getWorkoutsByUser,
-  updateWorkoutById,
-  deleteWorkoutById,
+  createWorkout,
+  getWorkouts,
+  updateWorkout,
+  deleteWorkout,
+  getWorkoutHistory,
+  getWorkoutProgress,
 };
