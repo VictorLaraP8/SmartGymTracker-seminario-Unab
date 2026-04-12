@@ -8,25 +8,23 @@ const workoutsRoutes = require('./routes/workouts.routes');
 const userRoutes = require('./routes/user.routes');
 const exerciseRoutes = require('./routes/exercise.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const goalRoutes = require('./routes/goal.routes');
 
 // MIDDLEWARES
 const { notFoundHandler, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
 
-// MIDDLEWARES BASE
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// RUTA BASE
 app.get('/', (req, res) => {
   res.status(200).json({
     message: 'API SmartGym Tracker funcionando correctamente',
   });
 });
 
-// HEALTH CHECK
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     ok: true,
@@ -34,14 +32,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// RUTAS PRINCIPALES
 app.use('/api/auth', authRoutes);
 app.use('/api/workouts', workoutsRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/exercises', exerciseRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/goals', goalRoutes);
 
-// MIDDLEWARES DE ERROR
 app.use(notFoundHandler);
 app.use(errorHandler);
 

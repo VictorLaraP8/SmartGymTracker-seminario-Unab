@@ -9,5 +9,7 @@ router.get('/recommendations', verifyToken, dashboardController.getMyRecommendat
 router.get('/adherence', verifyToken, dashboardController.getMyAdherence);
 router.get('/score', verifyToken, dashboardController.getUserScore);
 router.get('/ranking', verifyToken, isTrainer, dashboardController.getUsersRanking);
+router.get('/missions', verifyToken, dashboardController.getMyMissions);
+router.get('/achievements', verifyToken, dashboardController.getMyAchievements);
 
 module.exports = router;

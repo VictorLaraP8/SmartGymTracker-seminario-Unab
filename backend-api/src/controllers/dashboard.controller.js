@@ -89,10 +89,48 @@ const getUsersRanking = async (req, res) => {
   }
 };
 
+const getMyMissions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const data = await dashboardService.getMyMissions(userId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Misiones obtenidas correctamente',
+      data,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getMyAchievements = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const data = await dashboardService.getMyAchievements(userId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logros obtenidos correctamente',
+      data,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getMyDashboard,
   getMyRecommendations,
   getMyAdherence,
   getUserScore,
   getUsersRanking,
+  getMyMissions,
+  getMyAchievements,
 };

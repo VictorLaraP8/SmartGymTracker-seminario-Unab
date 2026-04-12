@@ -1,10 +1,47 @@
 const pool = require('../config/db');
 const workoutModel = require('../models/workout.model');
 const userModel = require('../models/user.model');
+const goalModel = require('../models/goal.model');
 const userService = require('./user.service');
+
+const getMyAdherence = async (userId) => {
+  const recommendedSessions = 4;
+
+  const query = `
+    SELECT COUNT(*) AS weekly_sessions
+    FROM workouts
+    WHERE user_id = $1
+      AND COALESCE(workout_date, created_at) >= NOW() - INTERVAL '7 days'
+  `;
+
+  const result = await pool.query(query, [userId]);
+  const weeklySessions = Number(result.rows[0].weekly_sessions);
+
+  const adherencePercentage = Math.min(
+    100,
+    Math.round((weeklySessions / recommendedSessions) * 100)
+  );
+
+  let status = 'low';
+
+  if (adherencePercentage >= 75) {
+    status = 'high';
+  } else if (adherencePercentage >= 50) {
+    status = 'medium';
+  }
+
+  return {
+    user_id: userId,
+    weekly_sessions: weeklySessions,
+    recommended_sessions: recommendedSessions,
+    adherence_percentage: adherencePercentage,
+    status,
+  };
+};
 
 const getMyDashboard = async (userId) => {
   const lastWorkout = await workoutModel.getLastWorkoutByUserId(userId);
+  const goal = await goalModel.getGoalByUserId(userId);
 
   let metrics = {
     total_exercises: 0,
@@ -36,6 +73,42 @@ const getMyDashboard = async (userId) => {
 
   const inactivity = await userService.getMyInactivityStatus(userId);
   const alertsData = await userService.getUserAlerts(userId);
+  const adherence = await getMyAdherence(userId);
+
+  let goalProgress = null;
+
+  if (goal) {
+    const volumeWeekQuery = `
+      SELECT COALESCE(SUM(we.sets * we.reps * we.weight), 0) AS weekly_volume
+      FROM workouts w
+      LEFT JOIN workout_exercises we ON w.id = we.workout_id
+      WHERE w.user_id = $1
+        AND COALESCE(w.workout_date, w.created_at) >= NOW() - INTERVAL '7 days'
+    `;
+    const volumeWeekResult = await pool.query(volumeWeekQuery, [userId]);
+    const weeklyVolume = Number(volumeWeekResult.rows[0].weekly_volume);
+
+    goalProgress = {
+      weekly_sessions_goal: goal.weekly_sessions_goal,
+      weekly_volume_goal: Number(goal.weekly_volume_goal),
+      adherence_goal: goal.adherence_goal,
+      current_weekly_sessions: adherence.weekly_sessions,
+      current_weekly_volume: weeklyVolume,
+      current_adherence: adherence.adherence_percentage,
+      sessions_progress_percentage: Math.min(
+        100,
+        Math.round((adherence.weekly_sessions / goal.weekly_sessions_goal) * 100)
+      ),
+      volume_progress_percentage: Math.min(
+        100,
+        Math.round((weeklyVolume / Number(goal.weekly_volume_goal)) * 100)
+      ),
+      adherence_progress_percentage: Math.min(
+        100,
+        Math.round((adherence.adherence_percentage / goal.adherence_goal) * 100)
+      ),
+    };
+  }
 
   return {
     user_id: userId,
@@ -55,12 +128,13 @@ const getMyDashboard = async (userId) => {
       status: inactivity.status,
     },
     alerts: alertsData.alerts,
+    goal: goal || null,
+    goal_progress: goalProgress,
   };
 };
 
 const getMyRecommendations = async (userId) => {
   const dashboard = await getMyDashboard(userId);
-
   const recommendations = [];
 
   if (!dashboard.last_workout) {
@@ -121,6 +195,28 @@ const getMyRecommendations = async (userId) => {
     });
   }
 
+  if (dashboard.goal_progress) {
+    if (dashboard.goal_progress.sessions_progress_percentage < 50) {
+      recommendations.push({
+        type: 'goal_sessions',
+        title: 'Acércate a tu meta semanal',
+        message:
+          'Tu avance de sesiones semanales aún es bajo respecto a tu objetivo. Intenta aumentar la frecuencia.',
+        priority: 'high',
+      });
+    }
+
+    if (dashboard.goal_progress.volume_progress_percentage < 50) {
+      recommendations.push({
+        type: 'goal_volume',
+        title: 'Incrementa tu volumen semanal',
+        message:
+          'Tu volumen semanal está por debajo de tu meta. Puedes aumentar carga, series o repeticiones.',
+        priority: 'medium',
+      });
+    }
+  }
+
   if (recommendations.length === 0) {
     recommendations.push({
       type: 'positive',
@@ -137,41 +233,6 @@ const getMyRecommendations = async (userId) => {
     metrics: dashboard.metrics,
     inactivity: dashboard.inactivity,
     recommendations,
-  };
-};
-
-const getMyAdherence = async (userId) => {
-  const recommendedSessions = 4;
-
-  const query = `
-    SELECT COUNT(*) AS weekly_sessions
-    FROM workouts
-    WHERE user_id = $1
-      AND COALESCE(workout_date, created_at) >= NOW() - INTERVAL '7 days'
-  `;
-
-  const result = await pool.query(query, [userId]);
-  const weeklySessions = Number(result.rows[0].weekly_sessions);
-
-  const adherencePercentage = Math.min(
-    100,
-    Math.round((weeklySessions / recommendedSessions) * 100)
-  );
-
-  let status = 'low';
-
-  if (adherencePercentage >= 75) {
-    status = 'high';
-  } else if (adherencePercentage >= 50) {
-    status = 'medium';
-  }
-
-  return {
-    user_id: userId,
-    weekly_sessions: weeklySessions,
-    recommended_sessions: recommendedSessions,
-    adherence_percentage: adherencePercentage,
-    status,
   };
 };
 
@@ -248,10 +309,123 @@ const getUsersRanking = async () => {
   return ranking;
 };
 
+const getMyMissions = async (userId) => {
+  const dashboard = await getMyDashboard(userId);
+  const missions = [];
+
+  if (!dashboard.goal || !dashboard.goal_progress) {
+    missions.push({
+      id: 'start-goal',
+      title: 'Define tu meta semanal',
+      description: 'Crea una meta para comenzar a medir tu progreso de forma inteligente.',
+      completed: false,
+      progress_percentage: 0,
+      reward: 'Base del plan activada',
+    });
+
+    return {
+      user_id: userId,
+      missions,
+    };
+  }
+
+  missions.push({
+    id: 'weekly-sessions',
+    title: `Completa ${dashboard.goal.weekly_sessions_goal} sesiones esta semana`,
+    description: `Llevas ${dashboard.goal_progress.current_weekly_sessions} de ${dashboard.goal.weekly_sessions_goal} sesiones.`,
+    completed:
+      dashboard.goal_progress.current_weekly_sessions >=
+      dashboard.goal.weekly_sessions_goal,
+    progress_percentage: dashboard.goal_progress.sessions_progress_percentage,
+    reward: 'Constancia semanal',
+  });
+
+  missions.push({
+    id: 'weekly-volume',
+    title: `Alcanza ${Number(dashboard.goal.weekly_volume_goal)} de volumen semanal`,
+    description: `Llevas ${dashboard.goal_progress.current_weekly_volume} de ${Number(
+      dashboard.goal.weekly_volume_goal
+    )}.`,
+    completed:
+      dashboard.goal_progress.current_weekly_volume >=
+      Number(dashboard.goal.weekly_volume_goal),
+    progress_percentage: dashboard.goal_progress.volume_progress_percentage,
+    reward: 'Impulso de rendimiento',
+  });
+
+  missions.push({
+    id: 'weekly-adherence',
+    title: `Mantén adherencia de ${dashboard.goal.adherence_goal}%`,
+    description: `Tu adherencia actual es ${dashboard.goal_progress.current_adherence}%.`,
+    completed:
+      dashboard.goal_progress.current_adherence >= dashboard.goal.adherence_goal,
+    progress_percentage: dashboard.goal_progress.adherence_progress_percentage,
+    reward: 'Disciplina activa',
+  });
+
+  return {
+    user_id: userId,
+    missions,
+  };
+};
+
+const getMyAchievements = async (userId) => {
+  const dashboard = await getMyDashboard(userId);
+  const adherence = await getMyAdherence(userId);
+
+  const achievements = [];
+
+  achievements.push({
+    id: 'first-workout',
+    title: 'Primer entrenamiento',
+    description: 'Registra tu primer entrenamiento',
+    unlocked: !!dashboard.last_workout,
+  });
+
+  achievements.push({
+    id: 'volume-1000',
+    title: 'Volumen 1000+',
+    description: 'Supera 1000 de volumen en una sesión',
+    unlocked: dashboard.metrics.total_volume >= 1000,
+  });
+
+  achievements.push({
+    id: '3-sessions-week',
+    title: '3 sesiones semanales',
+    description: 'Completa 3 entrenamientos en 7 días',
+    unlocked: adherence.weekly_sessions >= 3,
+  });
+
+  achievements.push({
+    id: 'high-adherence',
+    title: 'Alta adherencia',
+    description: 'Mantén adherencia sobre 75%',
+    unlocked: adherence.adherence_percentage >= 75,
+  });
+
+  if (dashboard.goal_progress) {
+    achievements.push({
+      id: 'goal-completed',
+      title: 'Meta semanal cumplida',
+      description: 'Cumple todos tus objetivos semanales',
+      unlocked:
+        dashboard.goal_progress.sessions_progress_percentage >= 100 &&
+        dashboard.goal_progress.volume_progress_percentage >= 100,
+    });
+  }
+
+  return {
+    user_id: userId,
+    achievements,
+  };
+};
+
 module.exports = {
   getMyDashboard,
   getMyRecommendations,
   getMyAdherence,
   getUserScore,
   getUsersRanking,
+  getMyMissions,
+  getMyAchievements,
 };
