@@ -37,3 +37,5 @@ El sistema se basa en una arquitectura cliente-servidor de tres capas:
 - **Base de datos**: PostgreSQL
 
 ### Diagrama conceptual
+
+<img width="419" height="832" alt="Captura de pantalla 2026-04-13 a la(s) 6 43 26 p m" src="https://github.com/user-attachments/assets/9b76711f-620e-4ba7-b901-de57c3704cc2" />
