@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (secretos)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores e IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Cobertura y temporales
+coverage/
+*.tmp
+*.temp
