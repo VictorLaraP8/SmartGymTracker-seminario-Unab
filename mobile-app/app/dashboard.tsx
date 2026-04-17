@@ -9,7 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import api from '../src/lib/api';
 import { getToken, logoutRequest } from '../src/lib/auth';
 
@@ -60,6 +61,12 @@ export default function DashboardScreen() {
     fetchData();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
+
   const handleLogout = async () => {
     await logoutRequest();
     router.replace('/');
@@ -91,6 +98,20 @@ export default function DashboardScreen() {
           <Text style={styles.logoutText}>Salir</Text>
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={() => router.push('/workout-create')}
+      >
+        <Text style={styles.primaryButtonText}>Registrar entrenamiento</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => router.push('/history')}
+      >
+        <Text style={styles.secondaryButtonText}>Ver historial</Text>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Score</Text>
@@ -163,6 +184,30 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#fff',
+    fontWeight: '700',
+  },
+  primaryButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    backgroundColor: '#0f172a',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  secondaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '700',
   },
   card: {
