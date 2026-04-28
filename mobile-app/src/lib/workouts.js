@@ -62,15 +62,16 @@ export const addExerciseToWorkoutRequest = async ({
   return response.data;
 };
 
-export const createWorkoutWithExerciseRequest = async ({
+export const createWorkoutWithExercisesRequest = async ({
   type,
   durationMinutes,
   workoutDate,
-  exerciseId,
-  sets,
-  reps,
-  weight,
+  exercises,
 }) => {
+  if (!Array.isArray(exercises) || exercises.length === 0) {
+    throw new Error('Debes agregar al menos un ejercicio');
+  }
+
   const workoutResponse = await createWorkoutRequest({
     type,
     durationMinutes,
@@ -80,20 +81,26 @@ export const createWorkoutWithExerciseRequest = async ({
   const workoutId = workoutResponse?.data?.id;
 
   if (!workoutId) {
-    throw new Error('No se pudo obtener el ID del workout creado');
+    throw new Error('No se pudo obtener el ID del entrenamiento');
   }
 
-  const exerciseResponse = await addExerciseToWorkoutRequest({
-    workoutId,
-    exerciseId,
-    sets,
-    reps,
-    weight,
-  });
+  const createdExercises = [];
+
+  for (const exercise of exercises) {
+    const exerciseResponse = await addExerciseToWorkoutRequest({
+      workoutId,
+      exerciseId: exercise.exerciseId,
+      sets: exercise.sets,
+      reps: exercise.reps,
+      weight: exercise.weight,
+    });
+
+    createdExercises.push(exerciseResponse);
+  }
 
   return {
     workout: workoutResponse,
-    exercise: exerciseResponse,
+    exercises: createdExercises,
   };
 };
 

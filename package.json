@@ -1,0 +1,14 @@
+{
+  "name": "smartgym-tracker-unab-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently -n backend,mobile -c green,cyan \"npm --prefix backend-api run dev\" \"npm --prefix mobile-app run start\"",
+    "ios": "concurrently -n backend,ios -c green,blue \"npm --prefix backend-api run dev\" \"npm --prefix mobile-app run ios\"",
+    "android": "concurrently -n backend,android -c green,magenta \"npm --prefix backend-api run dev\" \"npm --prefix mobile-app run android\"",
+    "web": "concurrently -n backend,web -c green,yellow \"npm --prefix backend-api run dev\" \"npm --prefix mobile-app run web\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
