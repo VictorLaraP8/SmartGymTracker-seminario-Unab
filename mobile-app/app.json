@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "mobile-app",
+    "slug": "mobile-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": true
+            },
+            "127.0.0.1": {
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "usesCleartextTraffic": true
+    }
+  }
+}
