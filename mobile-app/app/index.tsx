@@ -133,6 +133,10 @@ export default function LoginScreen() {
     Alert.alert('Recuperar contrasena', 'Esta modalidad estara disponible pronto.');
   };
 
+  const handleSocialLogin = (provider: 'Google' | 'Apple') => {
+    Alert.alert('Proximamente', `Inicio con ${provider} en desarrollo.`);
+  };
+
   if (checkingSession) {
     return (
       <View style={styles.center}>
@@ -269,6 +273,20 @@ export default function LoginScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <Text style={styles.continueText}>O CONTINUA CON</Text>
+
+        <View style={styles.socialRow}>
+          <Pressable style={styles.socialButton} onPress={() => handleSocialLogin('Google')}>
+            <Ionicons name="logo-google" size={16} color="#f97316" />
+            <Text style={styles.socialButtonText}>GOOGLE</Text>
+          </Pressable>
+
+          <Pressable style={styles.socialButton} onPress={() => handleSocialLogin('Apple')}>
+            <Ionicons name="logo-apple" size={16} color="#f3f4f6" />
+            <Text style={styles.socialButtonText}>APPLE</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -403,5 +421,34 @@ const styles = StyleSheet.create({
   modeToggleAccent: {
     color: '#22d3ee',
     fontWeight: '700',
+  },
+  continueText: {
+    color: 'rgba(209, 213, 219, 0.65)',
+    textAlign: 'center',
+    marginTop: 18,
+    marginBottom: 10,
+    fontSize: 11,
+    letterSpacing: 1.1,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  socialButton: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.4)',
+    borderRadius: 8,
+    backgroundColor: 'rgba(2, 9, 20, 0.5)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  socialButtonText: {
+    color: '#e5e7eb',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });
