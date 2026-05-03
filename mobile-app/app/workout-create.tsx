@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -28,6 +28,8 @@ type WorkoutExerciseForm = {
   sets: string;
   reps: string;
   weight: string;
+  rir: string;
+  rpe: string;
 };
 
 const TYPE_MIN_LEN = 2;
@@ -36,6 +38,10 @@ const DURATION_MIN = 1;
 const DURATION_MAX = 24 * 60;
 const SETS_REPS_MAX = 10_000;
 const WEIGHT_MAX_KG = 2000;
+const RIR_MIN = 0;
+const RIR_MAX = 10;
+const RPE_MIN = 6;
+const RPE_MAX = 10;
 
 const POSITIVE_INT_REGEX = /^\d+$/;
 
@@ -66,6 +72,71 @@ const parseNonNegativeWeight = (raw: string) => {
   return { ok: true as const, value: n };
 };
 
+const parseOptionalRir = (raw: string) => {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return { ok: true as const, value: null as number | null };
+  }
+  if (!POSITIVE_INT_REGEX.test(trimmed)) {
+    return { ok: false as const, reason: 'invalid' as const };
+  }
+  const n = Number(trimmed);
+  if (n < RIR_MIN || n > RIR_MAX) {
+    return { ok: false as const, reason: 'range' as const };
+  }
+  return { ok: true as const, value: n };
+};
+
+const parseOptionalRpe = (raw: string) => {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return { ok: true as const, value: null as number | null };
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || Number.isNaN(n)) {
+    return { ok: false as const };
+  }
+  if (n < RPE_MIN || n > RPE_MAX) {
+    return { ok: false as const };
+  }
+  return { ok: true as const, value: Math.round(n * 10) / 10 };
+};
+
+const MUSCLE_GROUP_ORDER = [
+  'Pecho',
+  'Espalda',
+  'Piernas',
+  'Hombros',
+  'Brazos',
+  'Glúteos',
+  'Core',
+  'Cardio',
+];
+
+type ExerciseGroup = { key: string; exercises: ExerciseOption[] };
+
+const groupExercisesByMuscleGroup = (options: ExerciseOption[]): ExerciseGroup[] => {
+  const map = new Map<string, ExerciseOption[]>();
+  for (const e of options) {
+    const key = (e.muscle_group || '').trim() || 'Otros';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(e);
+  }
+  for (const arr of map.values()) {
+    arr.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }
+  const keys = Array.from(map.keys());
+  keys.sort((a, b) => {
+    const ia = MUSCLE_GROUP_ORDER.indexOf(a);
+    const ib = MUSCLE_GROUP_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b, 'es');
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  return keys.map((key) => ({ key, exercises: map.get(key)! }));
+};
+
 export default function WorkoutCreateScreen() {
   const [type, setType] = useState('Fuerza');
   const [durationMinutes, setDurationMinutes] = useState('60');
@@ -76,6 +147,11 @@ export default function WorkoutCreateScreen() {
   const [exerciseOptions, setExerciseOptions] = useState<ExerciseOption[]>([]);
   const [exercisePickerForLocalId, setExercisePickerForLocalId] = useState<number | null>(null);
 
+  const groupedExerciseOptions = useMemo(
+    () => groupExercisesByMuscleGroup(exerciseOptions),
+    [exerciseOptions]
+  );
+
   const [exerciseForms, setExerciseForms] = useState<WorkoutExerciseForm[]>([
     {
       localId: 1,
@@ -83,6 +159,8 @@ export default function WorkoutCreateScreen() {
       sets: '4',
       reps: '10',
       weight: '0',
+      rir: '',
+      rpe: '',
     },
   ]);
 
@@ -102,6 +180,8 @@ export default function WorkoutCreateScreen() {
               sets: '4',
               reps: '10',
               weight: '0',
+              rir: '',
+              rpe: '',
             },
           ]);
         }
@@ -132,6 +212,8 @@ export default function WorkoutCreateScreen() {
         sets: '4',
         reps: '10',
         weight: '0',
+        rir: '',
+        rpe: '',
       },
     ]);
   };
@@ -163,7 +245,7 @@ export default function WorkoutCreateScreen() {
 
   const handleChangeField = (
     localId: number,
-    field: 'sets' | 'reps' | 'weight',
+    field: 'sets' | 'reps' | 'weight' | 'rir' | 'rpe',
     value: string
   ) => {
     setExerciseForms((current) =>
@@ -252,6 +334,22 @@ export default function WorkoutCreateScreen() {
           `${prefix}: el peso debe ser un número entre 0 y ${WEIGHT_MAX_KG} kg (puedes usar decimales, ej. 22.5).`
         );
       }
+
+      const rirCheck = parseOptionalRir(item.rir);
+      if (!rirCheck.ok) {
+        errors.push(
+          'reason' in rirCheck && rirCheck.reason === 'invalid'
+            ? `${prefix}: RIR debe ser un número entero (solo dígitos) o dejarse vacío.`
+            : `${prefix}: RIR debe estar entre ${RIR_MIN} y ${RIR_MAX}.`
+        );
+      }
+
+      const rpeCheck = parseOptionalRpe(item.rpe);
+      if (!rpeCheck.ok) {
+        errors.push(
+          `${prefix}: RPE debe ser un número entre ${RPE_MIN} y ${RPE_MAX} (p. ej. 8 o 8.5), o dejarse vacío.`
+        );
+      }
     }
 
     return errors;
@@ -272,7 +370,9 @@ export default function WorkoutCreateScreen() {
         const sets = isValidPositiveIntString(item.sets, SETS_REPS_MAX);
         const reps = isValidPositiveIntString(item.reps, SETS_REPS_MAX);
         const weight = parseNonNegativeWeight(item.weight);
-        if (!sets.ok || !reps.ok || !weight.ok) {
+        const rir = parseOptionalRir(item.rir);
+        const rpe = parseOptionalRpe(item.rpe);
+        if (!sets.ok || !reps.ok || !weight.ok || !rir.ok || !rpe.ok) {
           throw new Error('Validación inconsistente; vuelve a intentar.');
         }
         return {
@@ -280,6 +380,8 @@ export default function WorkoutCreateScreen() {
           sets: sets.value,
           reps: reps.value,
           weight: weight.value,
+          rir: rir.value,
+          rpe: rpe.value,
         };
       });
 
@@ -449,7 +551,7 @@ export default function WorkoutCreateScreen() {
                   placeholder="10"
                 />
 
-                <Text style={styles.label}>Peso</Text>
+                <Text style={styles.label}>Peso (kg)</Text>
                 <TextInput
                   style={styles.input}
                   value={form.weight}
@@ -458,6 +560,28 @@ export default function WorkoutCreateScreen() {
                   }
                   keyboardType="numeric"
                   placeholder="0"
+                />
+
+                <Text style={styles.label}>RIR (opcional, 0–10)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.rir}
+                  onChangeText={(value) =>
+                    handleChangeField(form.localId, 'rir', value)
+                  }
+                  keyboardType="numeric"
+                  placeholder="Ej: 2"
+                />
+
+                <Text style={styles.label}>RPE (opcional, 6–10)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.rpe}
+                  onChangeText={(value) =>
+                    handleChangeField(form.localId, 'rpe', value)
+                  }
+                  keyboardType="decimal-pad"
+                  placeholder="Ej: 8 o 8.5"
                 />
               </View>
             );
@@ -509,47 +633,59 @@ export default function WorkoutCreateScreen() {
                 style={styles.modalList}
                 keyboardShouldPersistTaps="handled"
               >
-                {exerciseOptions.map((exercise) => {
-                  const form = exerciseForms.find(
-                    (f) => f.localId === exercisePickerForLocalId
-                  );
-                  const selected = form?.exerciseId === exercise.id;
-
-                  return (
-                    <TouchableOpacity
-                      key={exercise.id}
+                {groupedExerciseOptions.map((group, groupIndex) => (
+                  <View key={group.key}>
+                    <Text
                       style={[
-                        styles.exerciseOption,
-                        selected && styles.exerciseOptionSelected,
+                        styles.groupHeader,
+                        groupIndex === 0 && styles.groupHeaderFirst,
                       ]}
-                      onPress={() =>
-                        exercisePickerForLocalId != null &&
-                        handleSelectExercise(
-                          exercisePickerForLocalId,
-                          exercise.id
-                        )
-                      }
                     >
-                      <Text
-                        style={[
-                          styles.exerciseName,
-                          selected && styles.exerciseNameSelected,
-                        ]}
-                      >
-                        {exercise.name}
-                      </Text>
+                      {group.key}
+                    </Text>
+                    {group.exercises.map((exercise) => {
+                      const form = exerciseForms.find(
+                        (f) => f.localId === exercisePickerForLocalId
+                      );
+                      const selected = form?.exerciseId === exercise.id;
 
-                      <Text
-                        style={[
-                          styles.exerciseMeta,
-                          selected && styles.exerciseMetaSelected,
-                        ]}
-                      >
-                        {exercise.muscle_group || 'Sin grupo muscular'}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                      return (
+                        <TouchableOpacity
+                          key={exercise.id}
+                          style={[
+                            styles.exerciseOption,
+                            selected && styles.exerciseOptionSelected,
+                          ]}
+                          onPress={() =>
+                            exercisePickerForLocalId != null &&
+                            handleSelectExercise(
+                              exercisePickerForLocalId,
+                              exercise.id
+                            )
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.exerciseName,
+                              selected && styles.exerciseNameSelected,
+                            ]}
+                          >
+                            {exercise.name}
+                          </Text>
+
+                          <Text
+                            style={[
+                              styles.exerciseMeta,
+                              selected && styles.exerciseMetaSelected,
+                            ]}
+                          >
+                            {exercise.muscle_group || 'Sin grupo muscular'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
               </ScrollView>
 
               <TouchableOpacity
@@ -724,6 +860,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 12,
     color: '#e2e8f0',
+  },
+  groupHeader: {
+    color: '#22d3ee',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  groupHeaderFirst: {
+    marginTop: 0,
   },
   modalList: {
     maxHeight: 360,

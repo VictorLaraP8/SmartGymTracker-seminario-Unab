@@ -45,6 +45,8 @@ export const addExerciseToWorkoutRequest = async ({
   sets,
   reps,
   weight,
+  rir,
+  rpe,
 }) => {
   const headers = await buildHeaders();
 
@@ -55,6 +57,8 @@ export const addExerciseToWorkoutRequest = async ({
       sets,
       reps,
       weight,
+      rir: rir ?? null,
+      rpe: rpe ?? null,
     },
     { headers }
   );
@@ -93,6 +97,8 @@ export const createWorkoutWithExercisesRequest = async ({
       sets: exercise.sets,
       reps: exercise.reps,
       weight: exercise.weight,
+      rir: exercise.rir,
+      rpe: exercise.rpe,
     });
 
     createdExercises.push(exerciseResponse);

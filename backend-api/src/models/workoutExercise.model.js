@@ -1,12 +1,20 @@
 const pool = require('../config/db');
 
-const addExerciseToWorkout = async ({ workoutId, exerciseId, sets, reps, weight }) => {
+const addExerciseToWorkout = async ({
+  workoutId,
+  exerciseId,
+  sets,
+  reps,
+  weight,
+  rir,
+  rpe,
+}) => {
   const query = `
-    INSERT INTO workout_exercises (workout_id, exercise_id, sets, reps, weight)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, workout_id, exercise_id, sets, reps, weight, created_at
+    INSERT INTO workout_exercises (workout_id, exercise_id, sets, reps, weight, rir, rpe)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id, workout_id, exercise_id, sets, reps, weight, rir, rpe, created_at
   `;
-  const values = [workoutId, exerciseId, sets, reps, weight || 0];
+  const values = [workoutId, exerciseId, sets, reps, weight || 0, rir ?? null, rpe ?? null];
   const result = await pool.query(query, values);
   return result.rows[0];
 };
@@ -22,6 +30,8 @@ const getExercisesByWorkoutId = async (workoutId) => {
       we.sets,
       we.reps,
       we.weight,
+      we.rir,
+      we.rpe,
       we.created_at
     FROM workout_exercises we
     INNER JOIN exercises e ON we.exercise_id = e.id

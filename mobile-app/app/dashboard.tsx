@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { LineChart } from 'react-native-chart-kit';
+import Svg, { Circle, Line as SvgLine } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../src/lib/api';
@@ -57,6 +59,20 @@ const ACHIEVEMENT_BADGE_DEFAULT = {
   bg: 'rgba(148, 163, 184, 0.12)',
 };
 
+const abbreviateNumber = (value: number) => {
+  const abs = Math.abs(value);
+
+  if (abs >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  }
+
+  if (abs >= 1_000) {
+    return `${(value / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`;
+  }
+
+  return `${Math.round(value)}`;
+};
+
 function AchievementBadge({ achievementId }: { achievementId: string }) {
   if (achievementId === 'three-day-streak') {
     return (
@@ -88,6 +104,21 @@ export default function DashboardScreen() {
   const [score, setScore] = useState(null);
   const [adherence, setAdherence] = useState(null);
   const [history, setHistory] = useState([]);
+  const [chartRange, setChartRange] = useState<'weekly' | 'monthly'>('weekly');
+  const [activeDot, setActiveDot] = useState<
+    | {
+        index: number;
+        x: number;
+        y: number;
+        value: number;
+        label: string;
+      }
+    | null
+  >(null);
+  const [dotPositions, setDotPositions] = useState<
+    Array<{ x: number; y: number; value: number }>
+  >([]);
+  const dotBufferRef = useRef<Array<{ x: number; y: number; value: number }>>([]);
 
   const fetchData = async () => {
     try {
@@ -147,13 +178,43 @@ export default function DashboardScreen() {
     await fetchData();
   };
 
+  const handleChangeRange = (next: 'weekly' | 'monthly') => {
+    if (next === chartRange) return;
+
+    setChartRange(next);
+    setActiveDot(null);
+    setDotPositions([]);
+    dotBufferRef.current = [];
+
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(() => {});
+    }
+  };
+
   const metrics = calculateDashboardMetrics(history, 5);
   const inactivity = calculateInactivityAlert(history);
-  const chartData = getVolumeChartData(history);
+  const chartData = useMemo(
+    () => getVolumeChartData(history, chartRange),
+    [history, chartRange]
+  );
   const streak = calculateStreak(history);
   const weeklyGoal = calculateWeeklyGoalProgress(history, 4);
   const achievements = calculateAchievements(history, streak);
   const screenWidth = Dimensions.get('window').width;
+  const chartWidth = screenWidth - 64;
+  const chartHeight = 200;
+  const hasChartData = chartData.data.some((value) => value > 0);
+  const formattedTotal = Number(chartData.total || 0).toLocaleString('es-CL');
+  const deltaPct = chartData.deltaPct;
+  const deltaTone =
+    deltaPct == null
+      ? 'neutral'
+      : deltaPct > 0
+        ? 'up'
+        : deltaPct < 0
+          ? 'down'
+          : 'neutral';
+  const periodLabel = chartRange === 'weekly' ? 'semana pasada' : 'periodo anterior';
   const adherencePercentage = Math.max(
     0,
     Math.min(100, Number(adherence?.adherence_percentage ?? 0))
@@ -398,68 +459,352 @@ export default function DashboardScreen() {
 
       <View style={styles.card}>
         <View style={styles.chartHeader}>
-          <Text style={styles.cardTitle}>Progreso del volumen</Text>
+          <View style={styles.chartHeaderTitleWrap}>
+            <Text style={styles.cardTitle}>Progreso del volumen</Text>
+            <Text style={styles.chartSubtitle}>Carga total levantada (kg)</Text>
+          </View>
           <View style={styles.chartChips}>
-            <View style={[styles.chartChip, styles.chartChipActive]}>
-              <Text style={[styles.chartChipText, styles.chartChipTextActive]}>Semanal</Text>
-            </View>
-            <View style={styles.chartChip}>
-              <Text style={styles.chartChipText}>Mensual</Text>
-            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => handleChangeRange('weekly')}
+              style={[
+                styles.chartChip,
+                chartRange === 'weekly' && styles.chartChipActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chartChipText,
+                  chartRange === 'weekly' && styles.chartChipTextActive,
+                ]}
+              >
+                Semanal
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => handleChangeRange('monthly')}
+              style={[
+                styles.chartChip,
+                chartRange === 'monthly' && styles.chartChipActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chartChipText,
+                  chartRange === 'monthly' && styles.chartChipTextActive,
+                ]}
+              >
+                Mensual
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {chartData.data.length === 0 ? (
-          <Text style={styles.muted}>No hay datos suficientes para el gráfico</Text>
+        {!hasChartData ? (
+          <View style={styles.chartEmpty}>
+            <View style={styles.chartEmptyIcon}>
+              <Ionicons
+                name="barbell-outline"
+                size={30}
+                color="rgba(34, 211, 238, 0.6)"
+              />
+            </View>
+            <Text style={styles.chartEmptyTitle}>Aún sin volumen registrado</Text>
+            <Text style={styles.chartEmptySub}>
+              Registra tu primer entrenamiento para ver tu progreso aquí.
+            </Text>
+          </View>
         ) : (
-          <LineChart
-            data={{
-              labels: chartData.labels,
-              datasets: [
-                {
-                  data: chartData.data,
-                },
-              ],
-            }}
-            width={screenWidth - 64}
-            height={190}
-            yAxisSuffix=""
-            fromZero
-            chartConfig={{
-              backgroundColor: 'transparent',
-              backgroundGradientFrom: 'transparent',
-              backgroundGradientTo: 'transparent',
-              decimalPlaces: 0,
-              color: (opacity = 1) => `rgba(165, 197, 255, ${opacity})`,
-              labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-              fillShadowGradientFrom: 'rgba(165, 197, 255, 0.35)',
-              fillShadowGradientTo: 'rgba(165, 197, 255, 0.02)',
-              fillShadowGradientFromOpacity: 0.35,
-              fillShadowGradientToOpacity: 0.02,
-              propsForDots: {
-                r: '4',
-                strokeWidth: '2',
-                stroke: '#a5c5ff',
-                fill: '#a5c5ff',
-              },
-              propsForBackgroundLines: {
-                strokeDasharray: '',
-                stroke: 'rgba(100, 116, 139, 0.2)',
-              },
-              propsForLabels: {
-                fontSize: 10,
-              },
-            }}
-            bezier
-            style={styles.chart}
-            withVerticalLines={false}
-            withHorizontalLines={false}
-            withInnerLines={false}
-            withOuterLines={false}
-            withVerticalLabels
-            withHorizontalLabels={false}
-            withShadow
-          />
+          <>
+            <View style={styles.chartHeadlineRow}>
+              <View style={styles.chartHeadlineLeft}>
+                <View style={styles.chartHeadlineValueRow}>
+                  <Text style={styles.chartHeadlineValue}>{formattedTotal}</Text>
+                  <Text style={styles.chartHeadlineUnit}>{chartData.unit}</Text>
+                </View>
+                <Text style={styles.chartHeadlineCaption}>
+                  {chartRange === 'weekly'
+                    ? 'Volumen de los últimos 7 días'
+                    : 'Volumen de las últimas 5 semanas'}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.chartDeltaPill,
+                  deltaTone === 'up' && styles.chartDeltaPillUp,
+                  deltaTone === 'down' && styles.chartDeltaPillDown,
+                  deltaTone === 'neutral' && styles.chartDeltaPillNeutral,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    deltaTone === 'up'
+                      ? 'arrow-up'
+                      : deltaTone === 'down'
+                        ? 'arrow-down'
+                        : 'remove'
+                  }
+                  size={12}
+                  color={
+                    deltaTone === 'up'
+                      ? '#4ade80'
+                      : deltaTone === 'down'
+                        ? '#f87171'
+                        : '#94a3b8'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.chartDeltaText,
+                    deltaTone === 'up' && styles.chartDeltaTextUp,
+                    deltaTone === 'down' && styles.chartDeltaTextDown,
+                  ]}
+                >
+                  {deltaPct == null
+                    ? 'Sin referencia'
+                    : `${Math.abs(deltaPct)}% vs ${periodLabel}`}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.chartCanvas}>
+              <LineChart
+                data={{
+                  labels: chartData.labels,
+                  datasets: [
+                    {
+                      data: chartData.data,
+                    },
+                  ],
+                }}
+                width={chartWidth}
+                height={chartHeight}
+                yAxisSuffix=""
+                fromZero
+                chartConfig={{
+                  backgroundColor: 'transparent',
+                  backgroundGradientFrom: 'transparent',
+                  backgroundGradientTo: 'transparent',
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(34, 211, 238, ${opacity})`,
+                  labelColor: (opacity = 1) =>
+                    `rgba(148, 163, 184, ${opacity})`,
+                  fillShadowGradientFrom: 'rgba(34, 211, 238, 0.55)',
+                  fillShadowGradientTo: 'rgba(34, 211, 238, 0)',
+                  fillShadowGradientFromOpacity: 0.55,
+                  fillShadowGradientToOpacity: 0,
+                  propsForDots: {
+                    r: '4',
+                    strokeWidth: '2',
+                    stroke: '#22d3ee',
+                    fill: 'rgba(2, 9, 20, 0.95)',
+                  },
+                  propsForBackgroundLines: {
+                    strokeDasharray: '',
+                    stroke: 'rgba(148, 163, 184, 0.08)',
+                  },
+                  propsForLabels: {
+                    fontSize: 10,
+                  },
+                }}
+                bezier
+                style={styles.chart}
+                withVerticalLines={false}
+                withHorizontalLines
+                withInnerLines
+                withOuterLines={false}
+                withVerticalLabels
+                withHorizontalLabels
+                withShadow={false}
+                segments={3}
+                formatYLabel={(value) => abbreviateNumber(Number(value))}
+                renderDotContent={({ x, y, index, indexData }) => {
+                  dotBufferRef.current[index] = {
+                    x,
+                    y,
+                    value: Number(indexData),
+                  };
+
+                  if (
+                    index === chartData.data.length - 1 &&
+                    chartData.data.length > 0
+                  ) {
+                    const buffer = dotBufferRef.current.slice(
+                      0,
+                      chartData.data.length
+                    );
+                    const allFilled = buffer.every((p) => p != null);
+                    const same =
+                      allFilled &&
+                      dotPositions.length === buffer.length &&
+                      dotPositions.every(
+                        (p, i) =>
+                          buffer[i] &&
+                          Math.abs(p.x - buffer[i].x) < 0.5 &&
+                          Math.abs(p.y - buffer[i].y) < 0.5
+                      );
+
+                    if (allFilled && !same) {
+                      Promise.resolve().then(() => setDotPositions(buffer));
+                    }
+                  }
+
+                  return null;
+                }}
+                onDataPointClick={({ value, x, y, index }) => {
+                  setActiveDot({
+                    index,
+                    x,
+                    y,
+                    value,
+                    label: chartData.labels[index] ?? '',
+                  });
+
+                  if (Platform.OS !== 'web') {
+                    Haptics.selectionAsync().catch(() => {});
+                  }
+                }}
+              />
+
+              {dotPositions.length === chartData.data.length &&
+                dotPositions.length > 0 && (
+                  <Svg
+                    style={StyleSheet.absoluteFill}
+                    width={chartWidth}
+                    height={chartHeight}
+                    pointerEvents="none"
+                  >
+                    {(() => {
+                      const sorted = [...dotPositions]
+                        .filter(Boolean)
+                        .sort((a, b) => a.value - b.value);
+                      const lo = sorted[0];
+                      const hi = sorted[sorted.length - 1];
+
+                      if (!lo || !hi || lo.value === hi.value) {
+                        return null;
+                      }
+
+                      const slope = (hi.y - lo.y) / (hi.value - lo.value);
+                      const avgY = lo.y + slope * (chartData.average - lo.value);
+                      const x1 = dotPositions[0].x;
+                      const x2 = dotPositions[dotPositions.length - 1].x;
+
+                      return (
+                        <SvgLine
+                          x1={x1}
+                          y1={avgY}
+                          x2={x2}
+                          y2={avgY}
+                          stroke="rgba(148, 163, 184, 0.55)"
+                          strokeWidth={1}
+                          strokeDasharray="4,4"
+                        />
+                      );
+                    })()}
+
+                    {chartData.peak.index >= 0 &&
+                      dotPositions[chartData.peak.index] && (
+                        <>
+                          <Circle
+                            cx={dotPositions[chartData.peak.index].x}
+                            cy={dotPositions[chartData.peak.index].y}
+                            r={14}
+                            fill="rgba(34, 211, 238, 0.18)"
+                          />
+                          <Circle
+                            cx={dotPositions[chartData.peak.index].x}
+                            cy={dotPositions[chartData.peak.index].y}
+                            r={5}
+                            fill="#22d3ee"
+                            stroke="#0b1220"
+                            strokeWidth={1.5}
+                          />
+                        </>
+                      )}
+
+                    {(() => {
+                      const lastIndex = dotPositions.length - 1;
+                      const last = dotPositions[lastIndex];
+
+                      if (!last || lastIndex === chartData.peak.index) {
+                        return null;
+                      }
+
+                      return (
+                        <>
+                          <Circle
+                            cx={last.x}
+                            cy={last.y}
+                            r={9}
+                            fill="rgba(34, 211, 238, 0.18)"
+                          />
+                          <Circle
+                            cx={last.x}
+                            cy={last.y}
+                            r={4}
+                            fill="#f8fafc"
+                            stroke="#22d3ee"
+                            strokeWidth={2}
+                          />
+                        </>
+                      );
+                    })()}
+                  </Svg>
+                )}
+
+              {activeDot ? (
+                <View
+                  style={[
+                    styles.chartTooltip,
+                    {
+                      left: Math.max(
+                        4,
+                        Math.min(activeDot.x - 50, chartWidth - 100)
+                      ),
+                      top: Math.max(0, activeDot.y - 44),
+                      pointerEvents: 'none',
+                    },
+                  ]}
+                >
+                  <Text style={styles.chartTooltipLabel}>{activeDot.label}</Text>
+                  <Text style={styles.chartTooltipValue}>
+                    {Number(activeDot.value).toLocaleString('es-CL')}{' '}
+                    <Text style={styles.chartTooltipUnit}>{chartData.unit}</Text>
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.chartKpiRow}>
+              <View style={styles.chartKpiCell}>
+                <Text style={styles.chartKpiLabel}>PICO</Text>
+                <Text style={styles.chartKpiValue}>
+                  {abbreviateNumber(chartData.peak.value)}
+                </Text>
+                <Text style={styles.chartKpiHint}>
+                  {chartData.peak.label || '—'}
+                </Text>
+              </View>
+              <View style={styles.chartKpiDivider} />
+              <View style={styles.chartKpiCell}>
+                <Text style={styles.chartKpiLabel}>PROMEDIO</Text>
+                <Text style={styles.chartKpiValue}>
+                  {abbreviateNumber(chartData.average)}
+                </Text>
+                <Text style={styles.chartKpiHint}>por sesión</Text>
+              </View>
+              <View style={styles.chartKpiDivider} />
+              <View style={styles.chartKpiCell}>
+                <Text style={styles.chartKpiLabel}>SESIONES</Text>
+                <Text style={styles.chartKpiValue}>{chartData.sessions}</Text>
+                <Text style={styles.chartKpiHint}>
+                  {chartRange === 'weekly' ? 'esta semana' : 'en 5 semanas'}
+                </Text>
+              </View>
+            </View>
+          </>
         )}
       </View>
 
@@ -514,8 +859,6 @@ export default function DashboardScreen() {
                 activeOpacity={0.9}
               >
                 <Text style={styles.lastWorkoutCtaText}>VER DETALLES</Text>
-                <View style={styles.lastWorkoutCtaDivider} />
-                <Text style={styles.lastWorkoutCtaPlus}>+</Text>
               </TouchableOpacity>
             </>
           )}
@@ -974,14 +1317,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#4ade80',
   },
   chart: {
-    marginTop: 8,
+    marginTop: 0,
+    marginLeft: -8,
     borderRadius: 14,
-    paddingRight: 14,
+    paddingRight: 0,
   },
   chartHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  chartHeaderTitleWrap: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  chartSubtitle: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: -2,
     marginBottom: 4,
   },
   chartChips: {
@@ -989,24 +1346,185 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   chartChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.25)',
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   chartChipActive: {
-    borderColor: 'rgba(165, 197, 255, 0.45)',
-    backgroundColor: 'rgba(71, 85, 105, 0.5)',
+    borderColor: 'rgba(34, 211, 238, 0.55)',
+    backgroundColor: 'rgba(34, 211, 238, 0.12)',
   },
   chartChipText: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#94a3b8',
     fontWeight: '700',
+    letterSpacing: 0.4,
   },
   chartChipTextActive: {
-    color: '#dbeafe',
+    color: '#67e8f9',
+  },
+  chartHeadlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  chartHeadlineLeft: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  chartHeadlineValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  chartHeadlineValue: {
+    color: '#f8fafc',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  chartHeadlineUnit: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  chartHeadlineCaption: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  chartDeltaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  chartDeltaPillUp: {
+    backgroundColor: 'rgba(74, 222, 128, 0.12)',
+    borderColor: 'rgba(74, 222, 128, 0.35)',
+  },
+  chartDeltaPillDown: {
+    backgroundColor: 'rgba(248, 113, 113, 0.12)',
+    borderColor: 'rgba(248, 113, 113, 0.35)',
+  },
+  chartDeltaPillNeutral: {
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    borderColor: 'rgba(148, 163, 184, 0.3)',
+  },
+  chartDeltaText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94a3b8',
+  },
+  chartDeltaTextUp: {
+    color: '#4ade80',
+  },
+  chartDeltaTextDown: {
+    color: '#f87171',
+  },
+  chartCanvas: {
+    position: 'relative',
+    marginTop: 8,
+  },
+  chartTooltip: {
+    position: 'absolute',
+    minWidth: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(2, 9, 20, 0.95)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.4)',
+    alignItems: 'center',
+  },
+  chartTooltipLabel: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  chartTooltipValue: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  chartTooltipUnit: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chartKpiRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.12)',
+  },
+  chartKpiCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  chartKpiDivider: {
+    width: 1,
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    marginVertical: 2,
+  },
+  chartKpiLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  chartKpiValue: {
+    color: '#e2e8f0',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  chartKpiHint: {
+    color: '#475569',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  chartEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  chartEmptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
+    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    marginBottom: 4,
+  },
+  chartEmptyTitle: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  chartEmptySub: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
   lastWorkoutSection: {
     marginBottom: 14,
@@ -1094,30 +1612,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   lastWorkoutCta: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#22d3ee',
     borderRadius: 10,
-    overflow: 'hidden',
     minHeight: 48,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
   lastWorkoutCtaText: {
-    flex: 1,
     textAlign: 'center',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.6,
-    color: '#0a1628',
-  },
-  lastWorkoutCtaDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(10, 22, 40, 0.25)',
-  },
-  lastWorkoutCtaPlus: {
-    paddingHorizontal: 14,
-    fontSize: 22,
-    fontWeight: '700',
     color: '#0a1628',
   },
 });

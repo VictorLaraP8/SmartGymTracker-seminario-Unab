@@ -1,7 +1,40 @@
 const workoutExerciseModel = require('../models/workoutExercise.model');
 const workoutModel = require('../models/workout.model');
 
-const addExerciseToWorkout = async ({ workoutId, userId, exerciseId, sets, reps, weight }) => {
+const normalizeOptionalRir = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    throw new Error('RIR debe ser un número entero entre 0 y 10, o dejarse vacío');
+  }
+  if (n < 0 || n > 10) {
+    throw new Error('RIR debe estar entre 0 y 10');
+  }
+  return n;
+};
+
+const normalizeOptionalRpe = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new Error('RPE debe ser un número entre 6 y 10, o dejarse vacío');
+  }
+  if (n < 6 || n > 10) {
+    throw new Error('RPE debe estar entre 6 y 10');
+  }
+  return Math.round(n * 10) / 10;
+};
+
+const addExerciseToWorkout = async ({
+  workoutId,
+  userId,
+  exerciseId,
+  sets,
+  reps,
+  weight,
+  rir,
+  rpe,
+}) => {
   if (!exerciseId || !sets || !reps) {
     throw new Error('exerciseId, sets y reps son obligatorios');
   }
@@ -13,6 +46,9 @@ const addExerciseToWorkout = async ({ workoutId, userId, exerciseId, sets, reps,
   if (weight !== undefined && Number(weight) < 0) {
     throw new Error('weight no puede ser negativo');
   }
+
+  const rirNorm = normalizeOptionalRir(rir);
+  const rpeNorm = normalizeOptionalRpe(rpe);
 
   const workout = await workoutModel.findWorkoutById(workoutId);
 
@@ -30,6 +66,8 @@ const addExerciseToWorkout = async ({ workoutId, userId, exerciseId, sets, reps,
     sets,
     reps,
     weight,
+    rir: rirNorm,
+    rpe: rpeNorm,
   });
 };
 

@@ -48,38 +48,164 @@ export const calculateDashboardMetrics = (workouts = [], weeklyGoal = 5) => {
   };
 };
 
-export const getVolumeChartData = (workouts = []) => {
-  if (!Array.isArray(workouts) || workouts.length === 0) {
-    return {
-      labels: [],
-      data: [],
-    };
-  }
+const dateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
-  const volumeByDate = {};
+const startOfDay = (date) => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const buildVolumeByDate = (workouts) => {
+  const map = {};
 
   workouts.forEach((workout) => {
     if (!workout.workout_date) return;
 
-    const date = new Date(workout.workout_date);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const key = `${year}-${month}-${day}`;
+    const key = dateKey(new Date(workout.workout_date));
 
-    if (!volumeByDate[key]) {
-      volumeByDate[key] = 0;
+    if (!map[key]) {
+      map[key] = 0;
     }
 
-    volumeByDate[key] += Number(workout.total_volume || 0);
+    map[key] += Number(workout.total_volume || 0);
   });
 
-  const sortedDates = Object.keys(volumeByDate).sort();
+  return map;
+};
+
+const sumRange = (volumeByDate, start, length) => {
+  let total = 0;
+
+  for (let i = 0; i < length; i += 1) {
+    const key = dateKey(addDays(start, i));
+    total += volumeByDate[key] || 0;
+  }
+
+  return total;
+};
+
+const formatDayLabel = (date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}`;
+};
+
+const buildSummary = ({ data, labels, prevTotal, unit }) => {
+  const total = data.reduce((acc, value) => acc + value, 0);
+  const sessions = data.filter((value) => value > 0).length;
+  const average = sessions > 0 ? Math.round(total / sessions) : 0;
+
+  let peakIndex = -1;
+  let peakValue = 0;
+
+  data.forEach((value, index) => {
+    if (value > peakValue) {
+      peakValue = value;
+      peakIndex = index;
+    }
+  });
+
+  const peak =
+    peakIndex >= 0
+      ? { value: peakValue, index: peakIndex, label: labels[peakIndex] }
+      : { value: 0, index: -1, label: '' };
+
+  let deltaPct = null;
+
+  if (prevTotal > 0) {
+    deltaPct = Math.round(((total - prevTotal) / prevTotal) * 100);
+  } else if (prevTotal === 0 && total > 0) {
+    deltaPct = 100;
+  }
 
   return {
-    labels: sortedDates.map((date) => date.slice(5)),
-    data: sortedDates.map((date) => volumeByDate[date]),
+    total,
+    prevTotal,
+    deltaPct,
+    peak,
+    average,
+    sessions,
+    unit,
   };
+};
+
+const buildWeeklyChart = (workouts) => {
+  const volumeByDate = buildVolumeByDate(workouts);
+  const today = startOfDay(new Date());
+  const start = addDays(today, -6);
+  const prevStart = addDays(start, -7);
+
+  const labels = [];
+  const data = [];
+
+  for (let i = 0; i < 7; i += 1) {
+    const day = addDays(start, i);
+    labels.push(formatDayLabel(day));
+    data.push(volumeByDate[dateKey(day)] || 0);
+  }
+
+  const prevTotal = sumRange(volumeByDate, prevStart, 7);
+
+  return {
+    labels,
+    data,
+    range: 'weekly',
+    ...buildSummary({ data, labels, prevTotal, unit: 'kg' }),
+  };
+};
+
+const startOfIsoWeek = (date) => {
+  const day = startOfDay(date);
+  const weekday = day.getDay();
+  const diff = weekday === 0 ? -6 : 1 - weekday;
+  return addDays(day, diff);
+};
+
+const buildMonthlyChart = (workouts) => {
+  const volumeByDate = buildVolumeByDate(workouts);
+  const currentWeekStart = startOfIsoWeek(new Date());
+  const start = addDays(currentWeekStart, -7 * 4);
+  const prevStart = addDays(start, -7 * 5);
+
+  const labels = [];
+  const data = [];
+
+  for (let i = 0; i < 5; i += 1) {
+    const weekStart = addDays(start, i * 7);
+    labels.push(formatDayLabel(weekStart));
+    data.push(sumRange(volumeByDate, weekStart, 7));
+  }
+
+  const prevTotal = sumRange(volumeByDate, prevStart, 7 * 5);
+
+  return {
+    labels,
+    data,
+    range: 'monthly',
+    ...buildSummary({ data, labels, prevTotal, unit: 'kg' }),
+  };
+};
+
+export const getVolumeChartData = (workouts = [], range = 'weekly') => {
+  const safeWorkouts = Array.isArray(workouts) ? workouts : [];
+
+  if (range === 'monthly') {
+    return buildMonthlyChart(safeWorkouts);
+  }
+
+  return buildWeeklyChart(safeWorkouts);
 };
 
 export const calculateStreak = (workouts = []) => {
