@@ -59,6 +59,7 @@ export default function ProfileScreen() {
   const [nameDraft, setNameDraft] = useState('');
   const [edadDraft, setEdadDraft] = useState('');
   const [alturaDraft, setAlturaDraft] = useState('');
+  const [pesoDraft, setPesoDraft] = useState('');
   const [objetivoDraft, setObjetivoDraft] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -93,6 +94,7 @@ export default function ProfileScreen() {
         setNameDraft(String(p.name ?? ''));
         setEdadDraft(p.edad != null ? String(p.edad) : '');
         setAlturaDraft(p.altura_cm != null ? String(p.altura_cm) : '');
+        setPesoDraft(p.peso_corporal != null ? String(p.peso_corporal) : '');
         setObjetivoDraft(String(p.objetivo ?? ''));
       }
 
@@ -143,6 +145,11 @@ export default function ProfileScreen() {
         body.altura_cm = null;
       } else {
         body.altura_cm = Number(alturaDraft);
+      }
+      if (pesoDraft.trim() === '') {
+        body.peso_corporal = null;
+      } else {
+        body.peso_corporal = Number(pesoDraft.replace(',', '.'));
       }
 
       const res = await patchProfileRequest(body);
@@ -289,9 +296,27 @@ export default function ProfileScreen() {
             value={alturaDraft}
             onChangeText={setAlturaDraft}
             keyboardType="decimal-pad"
-            placeholder="Para calcular IMC al registrar peso"
+            placeholder="Ej. 175"
             placeholderTextColor="#64748b"
           />
+          <Text style={styles.inputLabel}>Peso corporal (kg)</Text>
+          <TextInput
+            style={styles.input}
+            value={pesoDraft}
+            onChangeText={setPesoDraft}
+            keyboardType="decimal-pad"
+            placeholder="Tu peso actual"
+            placeholderTextColor="#64748b"
+          />
+          {profile?.imc != null && profile.imc !== '' && !Number.isNaN(Number(profile.imc)) ? (
+            <Text style={styles.imcHint}>
+              IMC: {Number(profile.imc).toFixed(2)} (según altura y peso del perfil)
+            </Text>
+          ) : (
+            <Text style={[styles.muted, styles.imcHintMuted]}>
+              Indica altura y peso corporal para ver tu IMC aquí.
+            </Text>
+          )}
           <Text style={styles.inputLabel}>Objetivo</Text>
           <TextInput
             style={[styles.input, styles.inputMultiline]}
@@ -526,6 +551,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   inputMultiline: { minHeight: 72, textAlignVertical: 'top' },
+  imcHint: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#22e7ff',
+  },
+  imcHintMuted: { marginTop: 10, fontSize: 13 },
   primaryBtn: {
     marginTop: 16,
     backgroundColor: '#22e7ff',

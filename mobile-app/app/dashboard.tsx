@@ -28,6 +28,7 @@ import {
 } from '../src/lib/metrics';
 import { calculateInactivityAlert } from '../src/lib/inactivity';
 import { calculateAchievements } from '../src/lib/achievements';
+import { getCoachSummaryRequest } from '../src/lib/coach';
 import { FlameIcon } from '@/components/flame-icon';
 import { AppBottomNav } from '@/components/app-bottom-nav';
 
@@ -120,6 +121,13 @@ export default function DashboardScreen() {
   >([]);
   const dotBufferRef = useRef<Array<{ x: number; y: number; value: number }>>([]);
 
+  /** Resumen COACH (mensajes / recomendaciones sin leer); no bloquea el dashboard si falla. */
+  const [coachSummary, setCoachSummary] = useState<{
+    coach: { id: number; name: string; email: string } | null;
+    unreadMessagesFromCoach?: number;
+    unreadRecommendations?: number;
+  } | null>(null);
+
   const fetchData = async () => {
     try {
       const token = await getToken();
@@ -145,6 +153,13 @@ export default function DashboardScreen() {
       setScore(scoreRes.data?.data || null);
       setAdherence(adherenceRes.data?.data || null);
       setHistory(historyRes?.data || []);
+
+      try {
+        const coachRes = await getCoachSummaryRequest();
+        setCoachSummary(coachRes?.data ?? null);
+      } catch {
+        setCoachSummary(null);
+      }
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -200,6 +215,10 @@ export default function DashboardScreen() {
   const streak = calculateStreak(history);
   const weeklyGoal = calculateWeeklyGoalProgress(history, 4);
   const achievements = calculateAchievements(history, streak);
+  const unreadCoachMessages = Number(coachSummary?.unreadMessagesFromCoach ?? 0);
+  const unreadCoachRecs = Number(coachSummary?.unreadRecommendations ?? 0);
+  const coachUnreadTotal = unreadCoachMessages + unreadCoachRecs;
+  const hasCoachAssigned = Boolean(coachSummary?.coach);
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = screenWidth - 64;
   const chartHeight = 200;
@@ -236,12 +255,6 @@ export default function DashboardScreen() {
         : lastWorkoutVolume / lastWorkoutDuration > 25
           ? { label: 'MEDIA', color: '#fcd34d', bolt: false }
           : { label: 'BAJA', color: '#94a3b8', bolt: false };
-
-  /** Android: emojis junto a fontWeight bold suelen verse como «?»; peso normal + sans-serif ayuda a la fuente emoji. */
-  const emojiHeaderStyle = [
-    styles.inlineEmoji,
-    Platform.OS === 'android' ? styles.inlineEmojiAndroid : null,
-  ];
 
   const getInactivityCardStyle = () => {
     if (inactivity.level === 'danger') {
@@ -307,9 +320,13 @@ export default function DashboardScreen() {
 
       <View style={styles.streakCard}>
         <View style={[styles.titleWithEmoji, styles.titleWithEmojiCentered]}>
-          <View style={styles.streakFlameIcon}>
-            <FlameIcon size={22} color="#facc15" />
-          </View>
+          <Ionicons
+            name="flame"
+            size={22}
+            color="#facc15"
+            style={styles.streakFlameIcon}
+            accessibilityLabel="Fuego, racha"
+          />
           <Text style={styles.streakTitle}>Racha actual</Text>
         </View>
         <Text style={styles.streakNumber}>{streak} día(s)</Text>
@@ -319,6 +336,64 @@ export default function DashboardScreen() {
             : 'Días consecutivos entrenando'}
         </Text>
       </View>
+
+      <TouchableOpacity
+        style={[
+          styles.coachDashCard,
+          coachUnreadTotal > 0 ? styles.coachDashCardAlert : null,
+        ]}
+        onPress={() => router.push('/coach')}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel="Abrir sección COACH"
+      >
+        <View style={styles.coachDashHeader}>
+          <Ionicons
+            name="notifications-outline"
+            size={18}
+            color={coachUnreadTotal > 0 ? '#22d3ee' : '#94a3b8'}
+          />
+          <Text style={styles.coachDashEyebrow}>COACH</Text>
+        </View>
+        {!hasCoachAssigned ? (
+          <>
+            <Text style={styles.coachDashTitle}>Aún sin entrenador</Text>
+            <Text style={styles.coachDashSub}>
+              Cuando te asignen, verás aquí alertas de mensajes y recomendaciones.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.coachDashTitle}>{coachSummary?.coach?.name}</Text>
+            {coachUnreadTotal > 0 ? (
+              <View style={styles.coachDashBadges}>
+                {unreadCoachMessages > 0 ? (
+                  <View style={styles.coachDashBadge}>
+                    <Text style={styles.coachDashBadgeText}>
+                      {unreadCoachMessages} mensaje{unreadCoachMessages === 1 ? '' : 's'} nuevo
+                      {unreadCoachMessages === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                ) : null}
+                {unreadCoachRecs > 0 ? (
+                  <View style={[styles.coachDashBadge, styles.coachDashBadgeRec]}>
+                    <Text style={styles.coachDashBadgeText}>
+                      {unreadCoachRecs} recomendación{unreadCoachRecs === 1 ? '' : 'es'} nueva
+                      {unreadCoachRecs === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.coachDashSub}>Todo al día · Toca para abrir COACH</Text>
+            )}
+          </>
+        )}
+        <View style={styles.coachDashCtaRow}>
+          <Text style={styles.coachDashCta}>Abrir mensajes</Text>
+          <Ionicons name="chevron-forward" size={18} color="#22d3ee" />
+        </View>
+      </TouchableOpacity>
 
       <View style={styles.goalCard}>
         <Text style={styles.goalTitle}>OBJETIVO SEMANAL</Text>
@@ -345,7 +420,13 @@ export default function DashboardScreen() {
 
       <View style={styles.achievementsCard}>
         <View style={[styles.titleWithEmoji, styles.achievementsTitleRow]}>
-          <Text style={emojiHeaderStyle}>🏆</Text>
+          <Ionicons
+            name="trophy"
+            size={20}
+            color="#facc15"
+            style={styles.achievementsHeaderIcon}
+            accessibilityLabel="Trofeo, logros"
+          />
           <Text style={styles.achievementsTitle}>Logros</Text>
         </View>
 
@@ -941,13 +1022,8 @@ const styles = StyleSheet.create({
   achievementsTitleRow: {
     marginBottom: 10,
   },
-  inlineEmoji: {
-    fontSize: 20,
+  achievementsHeaderIcon: {
     marginRight: 6,
-    fontWeight: '400',
-  },
-  inlineEmojiAndroid: {
-    fontFamily: 'sans-serif',
   },
   streakFlameIcon: {
     marginRight: 6,
@@ -967,6 +1043,83 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontSize: 13,
     marginTop: 4,
+  },
+  coachDashCard: {
+    backgroundColor: 'rgba(2, 9, 20, 0.76)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 231, 255, 0.22)',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 14,
+  },
+  coachDashCardAlert: {
+    borderColor: 'rgba(34, 211, 238, 0.65)',
+    backgroundColor: 'rgba(8, 47, 73, 0.55)',
+    shadowColor: '#22d3ee',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  coachDashHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  coachDashEyebrow: {
+    color: '#67e8f9',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  coachDashTitle: {
+    color: '#f8fafc',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  coachDashSub: {
+    color: '#94a3b8',
+    fontSize: 13,
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  coachDashBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  coachDashBadge: {
+    backgroundColor: 'rgba(34, 211, 238, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.45)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  coachDashBadgeRec: {
+    backgroundColor: 'rgba(129, 140, 248, 0.2)',
+    borderColor: 'rgba(165, 180, 252, 0.55)',
+  },
+  coachDashBadgeText: {
+    color: '#e0f2fe',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  coachDashCtaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+  },
+  coachDashCta: {
+    color: '#22d3ee',
+    fontSize: 14,
+    fontWeight: '700',
   },
   goalCard: {
     backgroundColor: 'rgba(2, 9, 20, 0.76)',

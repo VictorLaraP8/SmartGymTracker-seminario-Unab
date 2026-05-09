@@ -10,12 +10,20 @@ const computeImc = (pesoKg, alturaCm) => {
   return Math.round((p / (h * h)) * 100) / 100;
 };
 
+const withComputedImc = (user) => {
+  if (!user) return user;
+  return {
+    ...user,
+    imc: computeImc(user.peso_corporal, user.altura_cm),
+  };
+};
+
 const getMyProfile = async (userId) => {
   const user = await userModel.findUserByIdSafe(userId);
   if (!user) {
     throw new Error('Usuario no encontrado');
   }
-  return user;
+  return withComputedImc(user);
 };
 
 const sanitizePatch = (body) => {
@@ -53,6 +61,18 @@ const sanitizePatch = (body) => {
     }
   }
 
+  if (body.peso_corporal !== undefined) {
+    if (body.peso_corporal === null || body.peso_corporal === '') {
+      out.peso_corporal = null;
+    } else {
+      const w = Number(body.peso_corporal);
+      if (Number.isNaN(w) || w < 20 || w > 400) {
+        throw new Error('Peso inválido (usa kg entre 20 y 400)');
+      }
+      out.peso_corporal = w;
+    }
+  }
+
   if (body.objetivo !== undefined) {
     out.objetivo =
       body.objetivo === null || body.objetivo === ''
@@ -80,7 +100,7 @@ const updateMyProfile = async (userId, body) => {
   if (!updated) {
     throw new Error('Usuario no encontrado');
   }
-  return updated;
+  return withComputedImc(updated);
 };
 
 const getMyProgress = async (userId) => {

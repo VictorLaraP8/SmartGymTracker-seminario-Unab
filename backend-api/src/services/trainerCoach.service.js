@@ -76,6 +76,30 @@ const postMessageFromTrainer = async (trainerId, clientId, body) => {
   });
 };
 
+/**
+ * Lista el hilo coach_messages entre entrenador y alumno.
+ * No marca mensajes como leídos (eso lo hace el alumno al abrir COACH en la app).
+ */
+const listMessagesForTrainer = async (trainerId, clientId) => {
+  const assignment = await coachModel.findActiveAssignmentForTrainerAndClient(trainerId, clientId);
+
+  if (!assignment) {
+    throw new Error('No tienes una asignación activa con este alumno');
+  }
+
+  return await coachModel.listConversationMessages(clientId, trainerId);
+};
+
+const listRecommendationsForTrainer = async (trainerId, clientId) => {
+  const assignment = await coachModel.findActiveAssignmentForTrainerAndClient(trainerId, clientId);
+
+  if (!assignment) {
+    throw new Error('No tienes una asignación activa con este alumno');
+  }
+
+  return await coachModel.listRecommendationsForClient(clientId);
+};
+
 const postRecommendationFromTrainer = async (trainerId, clientId, title, body) => {
   const t = String(title || '').trim();
   const b = String(body || '').trim();
@@ -109,6 +133,8 @@ const postRecommendationFromTrainer = async (trainerId, clientId, title, body) =
 module.exports = {
   assignClientByEmail,
   listTrainerClients,
+  listMessagesForTrainer,
+  listRecommendationsForTrainer,
   postMessageFromTrainer,
   postRecommendationFromTrainer,
 };

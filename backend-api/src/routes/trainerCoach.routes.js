@@ -9,7 +9,13 @@ router.use(verifyToken, isTrainer);
 
 router.get('/', trainerCoachController.listClients);
 router.post('/', trainerCoachController.assignByEmail);
+router.get('/:clientId/messages', ensureTrainerClient, trainerCoachController.getTrainerClientMessages);
 router.post('/:clientId/messages', ensureTrainerClient, trainerCoachController.sendMessageToClient);
+router.get(
+  '/:clientId/recommendations',
+  ensureTrainerClient,
+  trainerCoachController.getTrainerClientRecommendations
+);
 router.post(
   '/:clientId/recommendations',
   ensureTrainerClient,

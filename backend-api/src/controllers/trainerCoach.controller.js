@@ -36,6 +36,42 @@ const listClients = async (req, res) => {
   }
 };
 
+const getTrainerClientMessages = async (req, res) => {
+  try {
+    const clientId = Number(req.params.clientId);
+    const data = await trainerCoachService.listMessagesForTrainer(req.user.id, clientId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Mensajes obtenidos correctamente',
+      data,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getTrainerClientRecommendations = async (req, res) => {
+  try {
+    const clientId = Number(req.params.clientId);
+    const data = await trainerCoachService.listRecommendationsForTrainer(req.user.id, clientId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Recomendaciones obtenidas correctamente',
+      data,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const sendMessageToClient = async (req, res) => {
   try {
     const clientId = Number(req.params.clientId);
@@ -84,6 +120,8 @@ const sendRecommendation = async (req, res) => {
 module.exports = {
   assignByEmail,
   listClients,
+  getTrainerClientMessages,
+  getTrainerClientRecommendations,
   sendMessageToClient,
   sendRecommendation,
 };

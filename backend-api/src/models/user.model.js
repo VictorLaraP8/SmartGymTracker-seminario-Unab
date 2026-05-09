@@ -41,6 +41,7 @@ const findUserByIdSafe = async (id) => {
       created_at,
       edad,
       altura_cm,
+      peso_corporal,
       objetivo,
       account_status
     FROM users
@@ -51,7 +52,7 @@ const findUserByIdSafe = async (id) => {
 };
 
 const updateUserProfile = async (id, fields) => {
-  const allowed = ['name', 'edad', 'altura_cm', 'objetivo', 'account_status'];
+  const allowed = ['name', 'edad', 'altura_cm', 'peso_corporal', 'objetivo', 'account_status'];
   const sets = [];
   const values = [];
   let i = 1;
@@ -73,7 +74,7 @@ const updateUserProfile = async (id, fields) => {
     UPDATE users
     SET ${sets.join(', ')}
     WHERE id = $${i}
-    RETURNING id, name, email, role, created_at, edad, altura_cm, objetivo, account_status
+    RETURNING id, name, email, role, created_at, edad, altura_cm, peso_corporal, objetivo, account_status
   `;
   const result = await pool.query(query, values);
   return result.rows[0];
