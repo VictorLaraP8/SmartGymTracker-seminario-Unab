@@ -143,7 +143,7 @@ function UserDetail() {
           <h3>Progreso visual</h3>
           <ProgressChart data={history} metricKey="volume" />
           {!history.length ? (
-            <p className="muted">No hay endpoint trainer para historial por alumno. Activa `VITE_USE_MOCKS=true` para demo visual.</p>
+            <p className="muted">Las metricas se calcularan una vez que el alumno inicie su programa.</p>
           ) : null}
         </article>
       </div>

@@ -65,7 +65,7 @@ function Progress() {
         <article className="detail-card">
           <h3>Métricas globales</h3>
           <ProgressChart data={componentsChart} metricKey="volume" />
-          {!history.length ? <p className="muted">Sin endpoint real por alumno; gráfico semanal en modo mock.</p> : null}
+          {!history.length ? <p className="muted">Las metricas se calcularan una vez que el alumno inicie su programa.</p> : null}
         </article>
       </div>
     </section>
